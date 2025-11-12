@@ -1,0 +1,38 @@
+# Source files (compiled version in dist/)
+src/
+
+# TypeScript config
+tsconfig.json
+tsconfig.cjs.json
+
+# Tests
+test/
+tests/
+*.test.ts
+*.spec.ts
+coverage/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# CI/CD
+.github/
+.travis.yml
+.gitlab-ci.yml
+
+# Development
+node_modules/
+*.log
+.DS_Store
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Debug
+node-red/
