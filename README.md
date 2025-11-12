@@ -21,9 +21,10 @@ Complete clustering solution for Node-RED using Valkey/Redis. This package combi
 - ✅ **Atomic Operations** - Lua scripts for nested property updates
 - ✅ **Compression** - Optional gzip for large context values (>1KB)
 
-### Cluster Leader Node
-- ✅ **Leader Election** - Distributed consensus for scheduled jobs
-- ✅ **Automatic Failover** - TTL-based leadership with heartbeat
+### Cluster Leader Nodes
+- ✅ **Leader Election** - Distributed consensus for scheduled jobs (sticky leadership)
+- ✅ **Automatic Failover** - TTL-based leadership with heartbeat renewal
+- ✅ **Manual Release** - Release leadership lock for graceful shutdown or rebalancing
 - ✅ **Multiple Leaders** - Different lock keys for different job types
 - ✅ **Visual Status** - Real-time leader/follower indicators
 
@@ -217,9 +218,28 @@ Use the `cluster-leader` node in your flows to ensure scheduled jobs run only on
                                 └─ Output 2 (follower) ─→ [Debug Log]
 ```
 
+**⚠️ IMPORTANT: How Leadership Works**
+
+The `cluster-leader` node implements **sticky leadership** with distributed locking:
+
+1. **Lock Acquisition**: The first instance to receive a message acquires the lock and becomes the leader
+2. **Sticky Leadership**: Once acquired, **the same instance remains the leader** for all subsequent messages
+3. **Leader Persistence**: The leader keeps the lock indefinitely through automatic heartbeat renewal (every 2 seconds)
+4. **Single Executor**: Only the leader instance executes the flow connected to Output 1 - all other instances send messages to Output 2 (follower)
+5. **Automatic Failover**: If the leader crashes or loses connection, the lock expires after the TTL (default 10 seconds) and another instance can become the new leader
+6. **Manual Release**: Use the `release-cluster-leader` node to manually release the lock and trigger a leadership change
+
+**Example Scenario:**
+- Worker-1, Worker-2, Worker-3 all receive a scheduled message every 5 minutes
+- Worker-1 acquires the lock and becomes leader
+- **Worker-1 executes the job** (Output 1)
+- Worker-2 and Worker-3 log as followers (Output 2)
+- **Worker-1 remains the leader** for ALL future executions until it crashes or the lock is manually released
+- If Worker-1 crashes, after 10 seconds Worker-2 or Worker-3 becomes the new leader
+
 **Configuration:**
 - **Lock Key**: `nodered:leader` (different keys = different leaders)
-- **Lock TTL**: `10` seconds (automatic failover time)
+- **Lock TTL**: `10` seconds (automatic failover time if leader crashes)
 - **Valkey Server**: Optional config node or env vars
 
 **Example Flow:**
@@ -281,6 +301,52 @@ Follower output (port 2):
 - 🟢 Green dot: This instance is the leader
 - 🟡 Yellow ring: This instance is a follower
 - ⚫ Grey ring: No current leader
+- 🔴 Red ring: Connection error
+
+### 4. Release Cluster Leader Node
+
+Use the `release-cluster-leader` node to manually release the leadership lock:
+
+```
+[Inject] → [Release Leader] → [Debug]
+```
+
+**When to use:**
+- **Graceful Shutdown**: Release leadership before shutting down a worker for maintenance
+- **Manual Failover**: Force a leadership change without waiting for the leader to crash
+- **Rebalancing**: Redistribute leadership across workers
+- **Testing**: Simulate failover scenarios in development
+
+**How it works:**
+1. Only the **current leader** can release its own lock
+2. After release, the next message will trigger a new leader election
+3. The lock is deleted from Redis immediately
+4. If a non-leader tries to release, nothing happens (warning logged)
+
+**Output Message Properties:**
+```javascript
+{
+  lockReleased: true,        // true if lock was released
+  releasedBy: "worker-1",   // hostname that released the lock
+  lockKey: "nodered:leader" // the lock key that was released
+}
+```
+
+**Example Flow: Graceful Shutdown**
+```
+[HTTP Endpoint: /shutdown] → [Release Leader] → [HTTP Response: "Lock released"]
+                                  ↓
+                            [Exec: shutdown -h now]
+```
+
+**Configuration:**
+- **Lock Key**: Must match the lock key of the `cluster-leader` node
+- **Valkey Server**: Optional config node or env vars
+
+**Status Indicators:**
+- 🟢 Green dot: Lock successfully released
+- 🟡 Yellow ring: Another node is the leader
+- ⚫ Grey ring: No lock exists
 - 🔴 Red ring: Connection error
 
 ### Advanced: Multiple Leader Groups

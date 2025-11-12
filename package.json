@@ -54,6 +54,7 @@
   "node-red": {
     "nodes": {
       "cluster-leader": "dist/nodes/cluster-leader.cjs",
+      "release-cluster-leader": "dist/nodes/release-cluster-leader.cjs",
       "valkey-config": "dist/nodes/valkey-config.cjs"
     }
   },

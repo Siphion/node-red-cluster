@@ -1,0 +1,90 @@
+<script type="text/javascript">
+    RED.nodes.registerType('release-cluster-leader', {
+        category: 'cluster',
+        color: '#ff9999',
+        defaults: {
+            name: { value: '' },
+            valkey: { type: 'valkey-config', required: false },
+            lockKey: { value: 'nodered:leader', required: true }
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: 'font-awesome/fa-unlock',
+        label: function() {
+            return this.name || 'release leader';
+        },
+        paletteLabel: 'release leader'
+    });
+</script>
+
+<script type="text/x-red" data-template-name="release-cluster-leader">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-valkey"><i class="fa fa-database"></i> Valkey Server</label>
+        <input type="text" id="node-input-valkey">
+    </div>
+    <div class="form-row">
+        <label for="node-input-lockKey"><i class="fa fa-key"></i> Lock Key</label>
+        <input type="text" id="node-input-lockKey" placeholder="nodered:leader">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="release-cluster-leader">
+    <p>Releases the leadership lock for a cluster-leader node.</p>
+
+    <h3>Details</h3>
+    <p>This node releases the leadership lock held by the current replica.
+    Use this to manually trigger a leadership change or for graceful shutdown scenarios.</p>
+
+    <p><b>Important:</b> Only the current leader can release its own lock.
+    If this replica is not the leader, the lock will not be released.</p>
+
+    <h3>Configuration</h3>
+    <dl class="message-properties">
+        <dt>Valkey Server <span class="property-type">config</span></dt>
+        <dd>Redis/Valkey connection configuration. If not set, uses environment variables
+            <code>REDIS_HOST</code> and <code>REDIS_PORT</code></dd>
+
+        <dt>Lock Key <span class="property-type">string</span></dt>
+        <dd>Redis key for the leader lock. Must match the lock key of the cluster-leader node.
+            Default: <code>nodered:leader</code></dd>
+    </dl>
+
+    <h3>Output Message Properties</h3>
+    <dl class="message-properties">
+        <dt>lockReleased <span class="property-type">boolean</span></dt>
+        <dd><code>true</code> if lock was released, <code>false</code> otherwise</dd>
+
+        <dt>releasedBy <span class="property-type">string</span></dt>
+        <dd>Hostname of the replica that released the lock (only if lockReleased=true)</dd>
+
+        <dt>currentLeader <span class="property-type">string</span></dt>
+        <dd>Hostname of the current leader (only if lockReleased=false and another node is leader)</dd>
+
+        <dt>lockKey <span class="property-type">string</span></dt>
+        <dd>The lock key that was checked</dd>
+    </dl>
+
+    <h3>Status Indicator</h3>
+    <ul>
+        <li><b>Green dot:</b> Lock successfully released</li>
+        <li><b>Yellow ring:</b> Another node is the leader</li>
+        <li><b>Grey ring:</b> No lock exists</li>
+        <li><b>Red ring:</b> Connection error</li>
+    </ul>
+
+    <h3>Example Flow</h3>
+    <pre>
+[Inject] → [Release Leader] → [Debug]
+    </pre>
+
+    <h3>Use Cases</h3>
+    <ul>
+        <li><b>Graceful Shutdown:</b> Release leadership before shutting down a replica</li>
+        <li><b>Manual Failover:</b> Force a leadership change for maintenance</li>
+        <li><b>Testing:</b> Simulate leader failures in development</li>
+    </ul>
+</script>
