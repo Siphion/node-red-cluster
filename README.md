@@ -754,7 +754,7 @@ This project is licensed under the **Elastic License 2.0**.
 - Cloud provider offering "Node-RED Hosting" as a managed service ❌
 - Platform selling "Scalable Node-RED" where users access hosted Node-RED instances ❌
 
-For full license terms, see [LICENSE](LICENSE) file or visit [elastic.co/licensing/elastic-license](https://www.elastic.co/licensing/elastic-license)
+For full license terms, see [LICENSE](LICENSE) file.
 
 ## 🙏 Credits
 
