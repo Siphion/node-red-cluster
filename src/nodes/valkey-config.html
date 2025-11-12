@@ -1,0 +1,45 @@
+<script type="text/javascript">
+    RED.nodes.registerType('valkey-config', {
+        category: 'config',
+        defaults: {
+            name: { value: '' },
+            host: { value: 'redis', required: true },
+            port: { value: 6379, required: true, validate: RED.validators.number() },
+            database: { value: 0, required: true, validate: RED.validators.number() }
+        },
+        credentials: {
+            password: { type: 'password' }
+        },
+        label: function() {
+            return this.name || this.host + ':' + this.port;
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="valkey-config">
+    <div class="form-row">
+        <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-config-input-name" placeholder="Valkey Server">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-host"><i class="fa fa-server"></i> Host</label>
+        <input type="text" id="node-config-input-host" placeholder="redis">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-port"><i class="fa fa-random"></i> Port</label>
+        <input type="number" id="node-config-input-port" placeholder="6379">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-database"><i class="fa fa-database"></i> Database</label>
+        <input type="number" id="node-config-input-database" placeholder="0">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-password"><i class="fa fa-lock"></i> Password</label>
+        <input type="password" id="node-config-input-password">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="valkey-config">
+    <p>Configuration node for Redis/Valkey connection.</p>
+    <p>Used by cluster-leader node for distributed leader election.</p>
+</script>

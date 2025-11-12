@@ -1,0 +1,162 @@
+<script type="text/javascript">
+    RED.nodes.registerType('cluster-leader', {
+        category: 'function',
+        color: '#a6bbcf',
+        defaults: {
+            name: { value: '' },
+            valkey: { value: '', type: 'valkey-config' },
+            lockKey: { value: 'nodered:leader', required: true },
+            lockTTL: { value: 10, required: true, validate: RED.validators.number() }
+        },
+        inputs: 1,
+        outputs: 2,
+        outputLabels: ['leader', 'follower'],
+        icon: 'font-awesome/fa-crown',
+        paletteLabel: 'cluster leader',
+        label: function() {
+            return this.name || 'cluster leader';
+        },
+        labelStyle: function() {
+            return this.name ? 'node_label_italic' : '';
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="cluster-leader">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-valkey"><i class="fa fa-server"></i> Valkey Server</label>
+        <input type="text" id="node-input-valkey" placeholder="Select Valkey server">
+    </div>
+    <div class="form-row">
+        <label for="node-input-lockKey"><i class="fa fa-key"></i> Lock Key</label>
+        <input type="text" id="node-input-lockKey" placeholder="nodered:leader">
+        <div class="form-tips">
+            <b>Tip:</b> Use different lock keys for different scheduled jobs to distribute leadership.
+            <br>Example: <code>nodered:cron-job-1</code>, <code>nodered:cron-job-2</code>
+        </div>
+    </div>
+    <div class="form-row">
+        <label for="node-input-lockTTL"><i class="fa fa-clock-o"></i> Lock TTL</label>
+        <input type="number" id="node-input-lockTTL" placeholder="10">
+        <div class="form-tips">
+            Time-to-live in seconds. Lock auto-expires for automatic failover.<br>
+            Recommended: 10-30 seconds depending on job frequency.
+        </div>
+    </div>
+</script>
+
+<script type="text/html" data-help-name="cluster-leader">
+    <p>Implements leader election for Node-RED cluster deployments using Redis/Valkey.</p>
+
+    <h3>Outputs</h3>
+    <ol class="node-ports">
+        <li>Leader output
+            <dl class="message-properties">
+                <dt>isLeader <span class="property-type">boolean</span></dt>
+                <dd>Set to <code>true</code></dd>
+                <dt>leaderHost <span class="property-type">string</span></dt>
+                <dd>Hostname of this instance (the leader)</dd>
+            </dl>
+        </li>
+        <li>Follower output
+            <dl class="message-properties">
+                <dt>isLeader <span class="property-type">boolean</span></dt>
+                <dd>Set to <code>false</code></dd>
+                <dt>leaderHost <span class="property-type">string</span></dt>
+                <dd>Hostname of the current leader</dd>
+                <dt>followerHost <span class="property-type">string</span></dt>
+                <dd>Hostname of this instance (a follower)</dd>
+            </dl>
+        </li>
+    </ol>
+
+    <h3>Details</h3>
+    <p>This node implements distributed leader election using Redis/Valkey for Node-RED cluster deployments.</p>
+
+    <p><b>How it works:</b></p>
+    <ul>
+        <li>Only ONE replica in the cluster will output messages on port 1 (leader)</li>
+        <li>All other replicas output messages on port 2 (followers)</li>
+        <li>Leadership is acquired using Redis SET with NX (not exists) and EX (expiry)</li>
+        <li>Lock automatically expires after TTL seconds, enabling automatic failover</li>
+        <li>Leader refreshes the lock every 2 seconds to maintain leadership</li>
+    </ul>
+
+    <p><b>Use Case:</b> Scheduled Jobs in Clustered Environment</p>
+    <pre>
+[Inject: Every 1 min] → [Cluster Leader] → [HTTP Request]
+                             ↓ (leader only)
+                          Execute job
+    </pre>
+
+    <h3>Configuration</h3>
+    <dl class="message-properties">
+        <dt>Valkey Server <span class="property-type">config</span></dt>
+        <dd>Redis/Valkey connection configuration. If not set, uses environment variables
+            <code>REDIS_HOST</code> and <code>REDIS_PORT</code></dd>
+
+        <dt>Lock Key <span class="property-type">string</span></dt>
+        <dd>Redis key for the leader lock. Default: <code>nodered:leader</code><br>
+            Use different keys for different jobs to distribute leadership across replicas.</dd>
+
+        <dt>Lock TTL <span class="property-type">number</span></dt>
+        <dd>Time-to-live in seconds. Default: 10<br>
+            Lock expires automatically for failover if leader dies.</dd>
+    </dl>
+
+    <h3>Status Indicator</h3>
+    <ul>
+        <li><b>Green dot:</b> This replica is the leader</li>
+        <li><b>Yellow ring:</b> This replica is a follower</li>
+        <li><b>Grey ring:</b> No current leader</li>
+        <li><b>Red ring:</b> Connection error</li>
+    </ul>
+
+    <h3>Advanced: Multiple Lock Groups</h3>
+    <p>Distribute leadership for different scheduled jobs across your cluster:</p>
+    <pre>
+Job A: lockKey="nodered:job-a" → Worker 1 becomes leader
+Job B: lockKey="nodered:job-b" → Worker 2 becomes leader
+Job C: lockKey="nodered:job-c" → Worker 3 becomes leader
+    </pre>
+
+    <h3>Example Flow</h3>
+    <pre>
+[
+  {
+    "id": "inject1",
+    "type": "inject",
+    "repeat": "60",
+    "name": "Every Minute",
+    "wires": [["leader1"]]
+  },
+  {
+    "id": "leader1",
+    "type": "cluster-leader",
+    "name": "Leader Check",
+    "lockKey": "nodered:cron-job",
+    "lockTTL": 10,
+    "wires": [["execute"], []]
+  },
+  {
+    "id": "execute",
+    "type": "http request",
+    "method": "POST",
+    "url": "http://api/job",
+    "name": "Execute Job",
+    "wires": [[]]
+  }
+]
+    </pre>
+
+    <h3>Troubleshooting</h3>
+    <ul>
+        <li><b>All replicas show "follower":</b> Check Redis connectivity and lock key</li>
+        <li><b>Multiple leaders:</b> Ensure all replicas use the same lock key</li>
+        <li><b>No failover:</b> Increase lock TTL or decrease heartbeat interval</li>
+    </ul>
+</script>

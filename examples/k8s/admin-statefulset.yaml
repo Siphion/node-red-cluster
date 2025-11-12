@@ -1,0 +1,162 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodered-admin
+  labels:
+    app: nodered
+    role: admin
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 1880
+    targetPort: 1880
+    protocol: TCP
+    name: http
+  selector:
+    app: nodered
+    role: admin
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nodered-admin
+  labels:
+    app: nodered
+    role: admin
+spec:
+  serviceName: nodered-admin
+  replicas: 1  # Single admin instance
+  selector:
+    matchLabels:
+      app: nodered
+      role: admin
+  template:
+    metadata:
+      labels:
+        app: nodered
+        role: admin
+    spec:
+      containers:
+      - name: nodered
+        image: nodered/node-red:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 1880
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: REDIS_HOST
+          value: "redis-service"  # Your Redis service name
+        - name: REDIS_PORT
+          value: "6379"
+        - name: TZ
+          value: "UTC"
+        # Git configuration for Projects
+        - name: GIT_AUTHOR_NAME
+          value: "Node-RED Admin"
+        - name: GIT_AUTHOR_EMAIL
+          value: "admin@example.com"
+        - name: GIT_COMMITTER_NAME
+          value: "Node-RED Admin"
+        - name: GIT_COMMITTER_EMAIL
+          value: "admin@example.com"
+        volumeMounts:
+        - name: nodered-data
+          mountPath: /data
+        - name: settings
+          mountPath: /data/settings.js
+          subPath: settings.js
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 1880
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 1880
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: settings
+        configMap:
+          name: nodered-admin-settings
+  volumeClaimTemplates:
+  - metadata:
+      name: nodered-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"  # Adjust to your storage class
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nodered-admin-settings
+data:
+  settings.js: |
+    module.exports = {
+      // Enable authentication
+      adminAuth: {
+        type: "credentials",
+        users: [{
+          username: "admin",
+          password: "$2b$08$...",  // Generate with: node -e "console.log(require('bcryptjs').hashSync('password', 8));"
+          permissions: "*"
+        }]
+      },
+
+      // Enable Projects with Git
+      editorTheme: {
+        projects: {
+          enabled: true,
+          workflow: {
+            mode: "manual"
+          }
+        }
+      },
+
+      // Valkey storage with Projects support
+      storageModule: require('node-red-storage-valkey'),
+      valkey: {
+        host: process.env.REDIS_HOST || 'redis-service',
+        port: parseInt(process.env.REDIS_PORT) || 6379,
+        keyPrefix: 'nodered:',
+
+        // Admin publishes updates
+        publishOnSave: true,
+        updateChannel: 'nodered:flows:updated',
+
+        // Package sync: admin publishes
+        syncPackages: true,
+        packageSyncOnAdmin: true,
+        packageChannel: 'nodered:packages:updated',
+
+        enableCompression: true
+      },
+
+      // Persistent directory for Projects
+      userDir: '/data',
+
+      // Logging
+      logging: {
+        console: {
+          level: "info",
+          metrics: false,
+          audit: false
+        }
+      }
+    };

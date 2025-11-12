@@ -1,0 +1,163 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodered-worker
+  labels:
+    app: nodered
+    role: worker
+spec:
+  type: ClusterIP
+  ports:
+  - port: 1880
+    targetPort: 1880
+    protocol: TCP
+    name: http
+  selector:
+    app: nodered
+    role: worker
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodered-worker
+  labels:
+    app: nodered
+    role: worker
+spec:
+  replicas: 3  # Scale as needed
+  selector:
+    matchLabels:
+      app: nodered
+      role: worker
+  template:
+    metadata:
+      labels:
+        app: nodered
+        role: worker
+    spec:
+      containers:
+      - name: nodered
+        image: nodered/node-red:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 1880
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: REDIS_HOST
+          value: "redis-service"  # Your Redis service name
+        - name: REDIS_PORT
+          value: "6379"
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: nodered-data-tmp
+          mountPath: /data
+        - name: settings
+          mountPath: /data/settings.js
+          subPath: settings.js
+          readOnly: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 1880
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 1880
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: nodered-data-tmp
+        emptyDir: {}  # Ephemeral storage, no persistence
+      - name: settings
+        configMap:
+          name: nodered-worker-settings
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nodered-worker-settings
+data:
+  settings.js: |
+    module.exports = {
+      // Disable editor on workers
+      httpAdminRoot: false,
+
+      // Projects disabled on workers
+      editorTheme: {
+        projects: {
+          enabled: false
+        },
+        palette: {
+          editable: false
+        }
+      },
+
+      // Valkey storage without Projects
+      storageModule: require('node-red-storage-valkey'),
+      valkey: {
+        host: process.env.REDIS_HOST || 'redis-service',
+        port: parseInt(process.env.REDIS_PORT) || 6379,
+        keyPrefix: 'nodered:',
+
+        // Worker subscribes and auto-restarts
+        subscribeToUpdates: true,
+        updateChannel: 'nodered:flows:updated',
+
+        // Package sync: worker installs
+        syncPackages: true,
+        packageSyncOnWorker: true,
+        packageChannel: 'nodered:packages:updated',
+
+        enableCompression: true
+      },
+
+      // Ephemeral directory
+      userDir: '/data',
+
+      // Logging
+      logging: {
+        console: {
+          level: "info",
+          metrics: false,
+          audit: false
+        }
+      }
+    };
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nodered-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nodered-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

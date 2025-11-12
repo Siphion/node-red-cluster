@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Valkey/Redis server
+  valkey:
+    image: valkey/valkey:latest
+    container_name: nodered-valkey
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+    networks:
+      - nodered-network
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Node-RED Admin (single instance with Projects)
+  nodered-admin:
+    image: nodered/node-red:latest
+    container_name: nodered-admin
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=valkey
+      - REDIS_PORT=6379
+      - TZ=UTC
+      # Git configuration for Projects
+      - GIT_AUTHOR_NAME=Node-RED Admin
+      - GIT_AUTHOR_EMAIL=admin@example.com
+      - GIT_COMMITTER_NAME=Node-RED Admin
+      - GIT_COMMITTER_EMAIL=admin@example.com
+    ports:
+      - "1880:1880"
+    volumes:
+      # Persistent storage for Projects (Git repositories)
+      - nodered-admin-data:/data
+      # Mount your settings.js for admin
+      - ./settings-admin.js:/data/settings.js:ro
+    networks:
+      - nodered-network
+    depends_on:
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Node-RED Workers (horizontally scalable)
+  nodered-worker:
+    image: nodered/node-red:latest
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=valkey
+      - REDIS_PORT=6379
+      - TZ=UTC
+    ports:
+      - "1881-1883:1880"  # Map to different host ports
+    volumes:
+      # Ephemeral storage (no persistence needed)
+      - /tmp/nodered-worker:/data
+      # Mount your settings.js for workers
+      - ./settings-worker.js:/data/settings.js:ro
+    networks:
+      - nodered-network
+    depends_on:
+      valkey:
+        condition: service_healthy
+    deploy:
+      replicas: 3  # Scale to 3 workers
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    restart: unless-stopped
+
+networks:
+  nodered-network:
+    driver: bridge
+
+volumes:
+  valkey-data:
+    driver: local
+  nodered-admin-data:
+    driver: local
