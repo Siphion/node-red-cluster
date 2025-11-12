@@ -13,7 +13,7 @@ module.exports = {
   },
 
   // Node-RED Cluster storage without Projects
-  storageModule: require('node-red-cluster'),
+  storageModule: require('node-red-cluster/storage'),
   valkey: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT) || 6379,
