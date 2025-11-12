@@ -38,6 +38,19 @@ module.exports = {
     enableCompression: true
   },
 
+  // Context storage using Valkey/Redis
+  contextStorage: {
+    default: {
+      module: require('node-red-cluster/context'),
+      config: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT) || 6379,
+        keyPrefix: 'nodered:context:',
+        db: 0
+      }
+    }
+  },
+
   // Persistent directory for Projects
   userDir: '/data',
 
