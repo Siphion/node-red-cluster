@@ -1,6 +1,6 @@
 {
   "name": "node-red-cluster",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Complete Node-RED clustering solution with Valkey/Redis: storage, context, and leader election",
   "keywords": [
     "node-red",
@@ -78,7 +78,7 @@
     "url": "https://github.com/Siphion/node-red-cluster.git"
   },
   "author": "Siphion",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "Elastic License 2.0",
   "engines": {
     "node": ">=18.0.0"
   },

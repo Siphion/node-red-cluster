@@ -35,6 +35,13 @@ spec:
         app: nodered
         role: worker
     spec:
+      initContainers:
+      - name: install-cluster-module
+        image: nodered/node-red:latest
+        command: ['sh', '-c', 'npm install node-red-cluster && cp -r node_modules /tmp/node_modules']
+        volumeMounts:
+        - name: nodered-data-tmp
+          mountPath: /tmp
       containers:
       - name: nodered
         image: nodered/node-red:latest
@@ -44,6 +51,8 @@ spec:
           name: http
           protocol: TCP
         env:
+        - name: NODE_PATH
+          value: "/tmp/node_modules"
         - name: NODE_ENV
           value: "production"
         - name: REDIS_HOST
@@ -105,8 +114,8 @@ data:
         }
       },
 
-      // Valkey storage without Projects
-      storageModule: require('node-red-storage-valkey'),
+      // Node-RED Cluster storage without Projects
+      storageModule: require('node-red-cluster'),
       valkey: {
         host: process.env.REDIS_HOST || 'redis-service',
         port: parseInt(process.env.REDIS_PORT) || 6379,

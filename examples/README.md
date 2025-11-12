@@ -1,19 +1,22 @@
 # Deployment Examples
 
-This directory contains example configurations for deploying Node-RED with Valkey storage in production environments.
+This directory contains example configurations for deploying Node-RED with node-red-cluster storage in production environments.
 
 ## Architecture Overview
 
 All examples use the **Admin + Worker pattern** recommended for production:
 
 - **Admin Node**: Single instance with persistent storage for Projects (Git repositories)
-- **Worker Nodes**: Horizontally scalable instances that load flows from Redis
+- **Worker Nodes**: Horizontally scalable instances that load flows from Redis/Valkey
 
 ## Files
 
 ### Docker Compose
 
 - **`docker-compose.yml`**: Complete stack with admin, workers, and Valkey
+- **`Dockerfile`**: Custom Node-RED image with node-red-cluster pre-installed
+- **`settings-admin.js`**: Settings for admin node
+- **`settings-worker.js`**: Settings for worker nodes
 
 ### Kubernetes
 
@@ -24,30 +27,33 @@ All examples use the **Admin + Worker pattern** recommended for production:
 
 ### Docker Compose
 
-1. Install dependencies in your Node-RED image:
-
-```dockerfile
-FROM nodered/node-red:latest
-RUN npm install node-red-storage-valkey
-```
-
-2. Build the image:
+1. Build the custom Node-RED image (includes node-red-cluster):
 
 ```bash
-docker build -t my-nodered:latest .
+cd examples
+docker build -t nodered-cluster:latest .
 ```
 
-3. Update `docker-compose.yml` to use your image
-
-4. Start the stack:
+2. Start the stack:
 
 ```bash
 docker-compose up -d
 ```
 
-5. Access the admin UI at `http://localhost:1880`
+3. Access the admin UI at `http://localhost:1880`
+   - Username: `admin`
+   - Password: `admin` (change in production!)
+
+The stack includes:
+- Valkey/Redis server on port 6379
+- Admin node on port 1880
+- 3 worker nodes on ports 1881-1883
+
+When you deploy flows from the admin UI, workers will automatically restart and load the updated flows.
 
 ### Kubernetes
+
+**Note**: The Kubernetes examples use initContainers to install `node-red-cluster` at pod startup. For production, it's recommended to build a custom image with the module pre-installed (using the provided Dockerfile) for faster startup times.
 
 1. Deploy Redis/Valkey first (or use existing service):
 
@@ -71,6 +77,22 @@ kubectl apply -f k8s/worker-deployment.yaml
 
 ```bash
 kubectl get svc nodered-admin
+```
+
+### Using Custom Image in Kubernetes
+
+For better performance, build and use a custom image:
+
+```bash
+# Build the image
+docker build -t your-registry/nodered-cluster:latest examples/
+
+# Push to your registry
+docker push your-registry/nodered-cluster:latest
+
+# Update the YAML files to use your custom image
+# Replace `image: nodered/node-red:latest` with `image: your-registry/nodered-cluster:latest`
+# Remove the initContainers section from both YAML files
 ```
 
 ## Configuration Notes

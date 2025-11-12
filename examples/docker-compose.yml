@@ -19,7 +19,10 @@ services:
 
   # Node-RED Admin (single instance with Projects)
   nodered-admin:
-    image: nodered/node-red:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nodered-cluster:latest
     container_name: nodered-admin
     environment:
       - NODE_ENV=production
@@ -47,7 +50,10 @@ services:
 
   # Node-RED Workers (horizontally scalable)
   nodered-worker:
-    image: nodered/node-red:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nodered-cluster:latest
     environment:
       - NODE_ENV=production
       - REDIS_HOST=valkey
