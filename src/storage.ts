@@ -28,7 +28,7 @@ export class ValkeyStorage implements StorageModule {
   private config!: Required<ValkeyStorageConfig>;
   private packageHelper?: PackageHelper;
   private packageSubscriber?: Redis;
-  private lastKnownPackages?: Set<string>;
+  private lastKnownPackages?: Record<string, string>;
   public localfilesystem?: any; // Public for git user sync in index.ts
   private runtime?: any; // Runtime reference for worker reload
   private packageSyncTimer?: NodeJS.Timeout; // Debounce timer for package sync
@@ -239,28 +239,20 @@ export class ValkeyStorage implements StorageModule {
             try {
               console.log(`[ValkeyStorage] Package update notification received`);
 
-              // Parse package list from admin
-              const adminPackages: string[] = JSON.parse(message);
-              const adminPackageSet = new Set(adminPackages);
+              // Parse dependencies object from admin (name -> version)
+              const adminDependencies: Record<string, string> = JSON.parse(message);
 
               // Read worker's current package.json to get installed packages
               const packageJsonPath = path.join(this.packageHelper!.getUserDir(), 'package.json');
-              let workerPackages: Set<string> = new Set();
+              let workerDependencies: Record<string, string> = {};
 
               try {
                 const packageContent = await fs.readFile(packageJsonPath, 'utf8');
                 const packageJson = JSON.parse(packageContent);
-                const dependencies = packageJson.dependencies || {};
+                workerDependencies = packageJson.dependencies || {};
 
-                for (const pkg of Object.keys(dependencies)) {
-                  // Include packages that start with 'node-red-contrib-' or '@'
-                  if (pkg.startsWith('node-red-contrib-') || pkg.startsWith('@')) {
-                    workerPackages.add(pkg);
-                  }
-                }
-
-                console.log(`[ValkeyStorage] Worker has ${workerPackages.size} packages installed`);
-                console.log(`[ValkeyStorage] Admin has ${adminPackageSet.size} packages`);
+                console.log(`[ValkeyStorage] Worker has ${Object.keys(workerDependencies).length} packages installed`);
+                console.log(`[ValkeyStorage] Admin has ${Object.keys(adminDependencies).length} packages`);
               } catch (error) {
                 console.log('[ValkeyStorage] Worker package.json not found, assuming fresh install');
               }
@@ -269,16 +261,17 @@ export class ValkeyStorage implements StorageModule {
               const packagesToInstall: string[] = [];
               const packagesToUninstall: string[] = [];
 
-              // Find packages to install (in admin but not in worker)
-              for (const pkg of adminPackages) {
-                if (!workerPackages.has(pkg)) {
-                  packagesToInstall.push(pkg);
+              // Find packages to install or update (missing or version mismatch)
+              for (const [pkg, version] of Object.entries(adminDependencies)) {
+                if (!workerDependencies[pkg] || workerDependencies[pkg] !== version) {
+                  // Install with specific version: package@version
+                  packagesToInstall.push(`${pkg}@${version}`);
                 }
               }
 
               // Find packages to uninstall (in worker but not in admin)
-              for (const pkg of workerPackages) {
-                if (!adminPackageSet.has(pkg)) {
+              for (const pkg of Object.keys(workerDependencies)) {
+                if (!adminDependencies[pkg]) {
                   packagesToUninstall.push(pkg);
                 }
               }
@@ -322,27 +315,19 @@ export class ValkeyStorage implements StorageModule {
           const packagesData = await this.client.get(packagesKey);
 
           if (packagesData) {
-            const adminPackages: string[] = JSON.parse(packagesData);
-            const adminPackageSet = new Set(adminPackages);
-            console.log(`[ValkeyStorage] Found ${adminPackages.length} packages in Redis`);
+            const adminDependencies: Record<string, string> = JSON.parse(packagesData);
+            console.log(`[ValkeyStorage] Found ${Object.keys(adminDependencies).length} packages in Redis`);
 
             // Read worker's current package.json to get installed packages
             const packageJsonPath = path.join(this.packageHelper!.getUserDir(), 'package.json');
-            let workerPackages: Set<string> = new Set();
+            let workerDependencies: Record<string, string> = {};
 
             try {
               const packageContent = await fs.readFile(packageJsonPath, 'utf8');
               const packageJson = JSON.parse(packageContent);
-              const dependencies = packageJson.dependencies || {};
+              workerDependencies = packageJson.dependencies || {};
 
-              for (const pkg of Object.keys(dependencies)) {
-                // Include packages that start with 'node-red-contrib-' or '@'
-                if (pkg.startsWith('node-red-contrib-') || pkg.startsWith('@')) {
-                  workerPackages.add(pkg);
-                }
-              }
-
-              console.log(`[ValkeyStorage] Worker has ${workerPackages.size} packages installed`);
+              console.log(`[ValkeyStorage] Worker has ${Object.keys(workerDependencies).length} packages installed`);
             } catch (error) {
               console.log('[ValkeyStorage] Worker package.json not found, assuming fresh install');
             }
@@ -351,16 +336,17 @@ export class ValkeyStorage implements StorageModule {
             const packagesToInstall: string[] = [];
             const packagesToUninstall: string[] = [];
 
-            // Find packages to install (in admin but not in worker)
-            for (const pkg of adminPackages) {
-              if (!workerPackages.has(pkg)) {
-                packagesToInstall.push(pkg);
+            // Find packages to install or update (missing or version mismatch)
+            for (const [pkg, version] of Object.entries(adminDependencies)) {
+              if (!workerDependencies[pkg] || workerDependencies[pkg] !== version) {
+                // Install with specific version: package@version
+                packagesToInstall.push(`${pkg}@${version}`);
               }
             }
 
             // Find packages to uninstall (in worker but not in admin)
-            for (const pkg of workerPackages) {
-              if (!adminPackageSet.has(pkg)) {
+            for (const pkg of Object.keys(workerDependencies)) {
+              if (!adminDependencies[pkg]) {
                 packagesToUninstall.push(pkg);
               }
             }
@@ -393,21 +379,20 @@ export class ValkeyStorage implements StorageModule {
 
       // Load initial package state from Redis for admin nodes
       if (this.config.role === 'admin') {
-        const configKey = this.getKey('config');
-        const configData = await this.client.get(configKey);
+        const packagesKey = 'nodered:packages';
+        const packagesData = await this.client.get(packagesKey);
 
-        if (configData) {
+        if (packagesData) {
           try {
-            const configJson = await this.deserialize<any>(configData);
-            this.lastKnownPackages = this.extractPackages(configJson);
-            console.log(`[ValkeyStorage] Loaded ${this.lastKnownPackages.size} existing packages from Redis`);
+            this.lastKnownPackages = JSON.parse(packagesData);
+            console.log(`[ValkeyStorage] Loaded ${Object.keys(this.lastKnownPackages || {}).length} existing packages from Redis`);
           } catch (error) {
             console.error('[ValkeyStorage] Error loading initial package state:', error);
             // Non-fatal - just start with empty state
-            this.lastKnownPackages = new Set();
+            this.lastKnownPackages = {};
           }
         } else {
-          this.lastKnownPackages = new Set();
+          this.lastKnownPackages = {};
         }
       }
     }
@@ -1048,37 +1033,28 @@ export class ValkeyStorage implements StorageModule {
         return;
       }
 
-      // Extract installed node-red packages from dependencies
-      const installedPackages = new Set<string>();
-      const dependencies = packageJson.dependencies || {};
+      // Extract installed packages with versions from dependencies
+      const dependencies: Record<string, string> = packageJson.dependencies || {};
 
-      for (const [pkg, version] of Object.entries(dependencies)) {
-        // Include packages that start with 'node-red-contrib-' or '@'
-        if (pkg.startsWith('node-red-contrib-') || pkg.startsWith('@')) {
-          installedPackages.add(pkg);
-        }
-      }
-
-      console.log('[ValkeyStorage] Found', installedPackages.size, 'installed packages in package.json');
-      console.log('[ValkeyStorage] Package list:', Array.from(installedPackages).join(', '));
+      console.log('[ValkeyStorage] Found', Object.keys(dependencies).length, 'installed packages in package.json');
+      console.log('[ValkeyStorage] Package list:', Object.keys(dependencies).join(', '));
 
       // Detect changes
-      if (this.hasPackageChanges(installedPackages)) {
+      if (this.hasPackageChanges(dependencies)) {
         console.log('[ValkeyStorage] Package changes detected, publishing update...');
 
-        // Publish package list as JSON array
-        const packageList = Array.from(installedPackages);
-        await this.client.publish(this.config.packageChannel, JSON.stringify(packageList));
+        // Publish dependencies object with versions
+        await this.client.publish(this.config.packageChannel, JSON.stringify(dependencies));
 
         // Also save to Redis for worker startup sync
         const packagesKey = 'nodered:packages';
-        await this.client.set(packagesKey, JSON.stringify(packageList));
+        await this.client.set(packagesKey, JSON.stringify(dependencies));
 
-        console.log(`[ValkeyStorage] Published ${packageList.length} package(s) to ${this.config.packageChannel}`);
-        console.log(`[ValkeyStorage] Saved ${packageList.length} package(s) to Redis key: ${packagesKey}`);
+        console.log(`[ValkeyStorage] Published ${Object.keys(dependencies).length} package(s) with versions to ${this.config.packageChannel}`);
+        console.log(`[ValkeyStorage] Saved ${Object.keys(dependencies).length} package(s) to Redis key: ${packagesKey}`);
 
         // Update known packages
-        this.lastKnownPackages = installedPackages;
+        this.lastKnownPackages = dependencies;
       }
     } catch (error) {
       // Log detailed error for debugging
@@ -1093,57 +1069,27 @@ export class ValkeyStorage implements StorageModule {
   }
 
   /**
-   * Extract package names from Node-RED .config.json
-   * Filters out core Node-RED modules
-   * Returns empty set if data is invalid (defensive)
+   * Check if package dependencies have changed from last known state
+   * Compares both package names and versions
    */
-  private extractPackages(configJson: any): Set<string> {
-    const packages = new Set<string>();
-
-    // Defensive checks - return empty set if invalid data
-    if (!configJson || typeof configJson !== 'object') {
-      console.warn('[ValkeyStorage] extractPackages: configJson is not a valid object');
-      return packages;
-    }
-
-    if (!configJson.nodes || typeof configJson.nodes !== 'object') {
-      console.warn('[ValkeyStorage] extractPackages: configJson.nodes is missing or invalid');
-      return packages;
-    }
-
-    try {
-      for (const packageName of Object.keys(configJson.nodes)) {
-        // Filter out core nodes (start with 'node-red/')
-        // Keep all user-installed packages
-        if (typeof packageName === 'string' && !packageName.startsWith('node-red/')) {
-          packages.add(packageName);
-        }
-      }
-    } catch (error) {
-      console.error('[ValkeyStorage] extractPackages: Error iterating packages:', error);
-      // Return whatever packages we collected so far
-    }
-
-    return packages;
-  }
-
-  /**
-   * Check if package list has changed from last known state
-   */
-  private hasPackageChanges(newPackages: Set<string>): boolean {
+  private hasPackageChanges(newPackages: Record<string, string>): boolean {
     // First run - always consider as changed
     if (!this.lastKnownPackages) {
       return true;
     }
 
-    // Different size means changes occurred
-    if (newPackages.size !== this.lastKnownPackages.size) {
+    // Get package names
+    const newPackageNames = Object.keys(newPackages);
+    const oldPackageNames = Object.keys(this.lastKnownPackages);
+
+    // Different count means changes occurred
+    if (newPackageNames.length !== oldPackageNames.length) {
       return true;
     }
 
-    // Check if all packages match
-    for (const pkg of newPackages) {
-      if (!this.lastKnownPackages.has(pkg)) {
+    // Check if all packages match (name and version)
+    for (const [pkg, version] of Object.entries(newPackages)) {
+      if (this.lastKnownPackages[pkg] !== version) {
         return true;
       }
     }
