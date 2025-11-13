@@ -57,10 +57,10 @@ export class FileSystemHelper {
       const content = JSON.stringify(flowData, null, 4);
       await fs.writeFile(this.flowsFile, content, 'utf8');
 
-      console.log(`[ValkeyStorage] Flows written to ${this.flowsFile}`);
+      console.log(`[ClusterStorage] Flows written to ${this.flowsFile}`);
       return rev;
     } catch (error) {
-      console.error('[ValkeyStorage] Error writing flows to file:', error);
+      console.error('[ClusterStorage] Error writing flows to file:', error);
       throw error;
     }
   }
@@ -75,7 +75,7 @@ export class FileSystemHelper {
       const content = await fs.readFile(this.flowsFile, 'utf8');
       const flowData = JSON.parse(content);
 
-      console.log(`[ValkeyStorage] Flows loaded from ${this.flowsFile}`);
+      console.log(`[ClusterStorage] Flows loaded from ${this.flowsFile}`);
 
       // Return in Node-RED format (with rev if present)
       if (flowData.flows && Array.isArray(flowData.flows)) {
@@ -98,7 +98,7 @@ export class FileSystemHelper {
         // File doesn't exist
         return null;
       }
-      console.error('[ValkeyStorage] Error reading flows from file:', error);
+      console.error('[ClusterStorage] Error reading flows from file:', error);
       throw error;
     }
   }

@@ -56,7 +56,7 @@ export class ValkeyStorage implements StorageModule {
 
     // Validate required role field
     if (!userConfig.role || (userConfig.role !== 'admin' && userConfig.role !== 'worker')) {
-      throw new Error('[ValkeyStorage] "role" field is required and must be either "admin" or "worker"');
+      throw new Error('[ClusterStorage] "role" field is required and must be either "admin" or "worker"');
     }
 
     // Extract storage-specific options with defaults
@@ -119,7 +119,7 @@ export class ValkeyStorage implements StorageModule {
       : connectionConfig.host
         ? `${connectionConfig.host}:${connectionConfig.port || 6379}`
         : 'Redis (default connection)';
-    console.log(`[ValkeyStorage] Connected to ${connInfo}`);
+    console.log(`[ClusterStorage] Connected to ${connInfo}`);
 
     // Initialize localfilesystem for both Admin and Worker nodes
     // Restore from Redis will happen lazily on first get() call
@@ -130,23 +130,23 @@ export class ValkeyStorage implements StorageModule {
         const runtimeLibDir = require('path').dirname(runtimePath);
         const localfsPath = require('path').join(runtimeLibDir, 'storage/localfilesystem');
 
-        console.log('[ValkeyStorage] Loading localfilesystem from:', localfsPath);
+        console.log('[ClusterStorage] Loading localfilesystem from:', localfsPath);
         this.localfilesystem = require(localfsPath);
 
         // Initialize localfilesystem - it will load existing files or start empty
         await this.localfilesystem.init(settings, runtime);
 
-        console.log('[ValkeyStorage] LocalFileSystem initialized successfully');
+        console.log('[ClusterStorage] LocalFileSystem initialized successfully');
       } catch (error) {
-        console.error('[ValkeyStorage] Failed to initialize localfilesystem:', error);
+        console.error('[ClusterStorage] Failed to initialize localfilesystem:', error);
         // Non-fatal - continue without localfilesystem support
         this.localfilesystem = undefined;
       }
     } else {
       if (!settings.userDir) {
-        console.log('[ValkeyStorage] LocalFileSystem not available: settings.userDir is not set');
+        console.log('[ClusterStorage] LocalFileSystem not available: settings.userDir is not set');
       } else if (!runtime) {
-        console.log('[ValkeyStorage] LocalFileSystem not available: runtime parameter is missing');
+        console.log('[ClusterStorage] LocalFileSystem not available: runtime parameter is missing');
       }
     }
 
@@ -165,7 +165,7 @@ export class ValkeyStorage implements StorageModule {
           if (flows && (Array.isArray(flows) ? flows.length > 0 : Object.keys(flows).length > 0)) {
             const data = await this.serialize(flows);
             await this.client.set(flowsKey, data);
-            console.log('[ValkeyStorage] Admin: synced existing flows to Redis on startup');
+            console.log('[ClusterStorage] Admin: synced existing flows to Redis on startup');
           }
         }
 
@@ -178,10 +178,10 @@ export class ValkeyStorage implements StorageModule {
           const creds = await this.localfilesystem.getCredentials() || {};
           const data = await this.serialize(creds);
           await this.client.set(credsKey, data);
-          console.log('[ValkeyStorage] Admin: synced existing credentials to Redis on startup');
+          console.log('[ClusterStorage] Admin: synced existing credentials to Redis on startup');
         }
       } catch (error) {
-        console.error('[ValkeyStorage] Error syncing existing data to Redis:', error);
+        console.error('[ClusterStorage] Error syncing existing data to Redis:', error);
         // Non-fatal - continue
       }
     }
@@ -196,38 +196,38 @@ export class ValkeyStorage implements StorageModule {
 
       this.subscriber.on('message', async (channel: string, message: string) => {
         if (channel === this.config.updateChannel) {
-          console.log(`[ValkeyStorage] Flows updated at ${message}, reloading...`);
+          console.log(`[ClusterStorage] Flows updated at ${message}, reloading...`);
 
           try {
             // Worker reads from Redis on every getFlows() call
             // Just call loadFlows() to trigger reload without process restart
             if (this.runtime && this.runtime.nodes && this.runtime.nodes.loadFlows) {
               await this.runtime.nodes.loadFlows();
-              console.log('[ValkeyStorage] Worker: flows reloaded successfully');
+              console.log('[ClusterStorage] Worker: flows reloaded successfully');
             } else {
-              console.log('[ValkeyStorage] Worker: runtime.nodes.loadFlows not available, restarting process');
+              console.log('[ClusterStorage] Worker: runtime.nodes.loadFlows not available, restarting process');
               process.exit(0);
             }
           } catch (error: any) {
-            console.error('[ValkeyStorage] Worker: error reloading flows:', error.message || error);
-            console.log('[ValkeyStorage] Falling back to process restart');
+            console.error('[ClusterStorage] Worker: error reloading flows:', error.message || error);
+            console.log('[ClusterStorage] Falling back to process restart');
             process.exit(0);
           }
         }
       });
 
-      console.log(`[ValkeyStorage] Subscribed to ${this.config.updateChannel}`);
+      console.log(`[ClusterStorage] Subscribed to ${this.config.updateChannel}`);
     }
 
     // Initialize package synchronization
     if (this.config.syncPackages) {
       if (!settings.userDir) {
-        throw new Error('[ValkeyStorage] syncPackages requires settings.userDir to be set');
+        throw new Error('[ClusterStorage] syncPackages requires settings.userDir to be set');
       }
 
       // Initialize PackageHelper
       this.packageHelper = new PackageHelper(settings.userDir);
-      console.log(`[ValkeyStorage] Package synchronization enabled, using ${settings.userDir}`);
+      console.log(`[ClusterStorage] Package synchronization enabled, using ${settings.userDir}`);
 
       // Setup package subscriber for worker nodes
       if (this.config.role === 'worker') {
@@ -237,7 +237,7 @@ export class ValkeyStorage implements StorageModule {
         this.packageSubscriber.on('message', async (channel: string, message: string) => {
           if (channel === this.config.packageChannel) {
             try {
-              console.log(`[ValkeyStorage] Package update notification received`);
+              console.log(`[ClusterStorage] Package update notification received`);
 
               // Parse dependencies object from admin (name -> version)
               const adminDependencies: Record<string, string> = JSON.parse(message);
@@ -251,10 +251,10 @@ export class ValkeyStorage implements StorageModule {
                 const packageJson = JSON.parse(packageContent);
                 workerDependencies = packageJson.dependencies || {};
 
-                console.log(`[ValkeyStorage] Worker has ${Object.keys(workerDependencies).length} packages installed`);
-                console.log(`[ValkeyStorage] Admin has ${Object.keys(adminDependencies).length} packages`);
+                console.log(`[ClusterStorage] Worker has ${Object.keys(workerDependencies).length} packages installed`);
+                console.log(`[ClusterStorage] Admin has ${Object.keys(adminDependencies).length} packages`);
               } catch (error) {
-                console.log('[ValkeyStorage] Worker package.json not found, assuming fresh install');
+                console.log('[ClusterStorage] Worker package.json not found, assuming fresh install');
               }
 
               // Calculate diff
@@ -276,39 +276,39 @@ export class ValkeyStorage implements StorageModule {
                 }
               }
 
-              console.log(`[ValkeyStorage] Packages to install: ${packagesToInstall.length}`);
-              console.log(`[ValkeyStorage] Packages to uninstall: ${packagesToUninstall.length}`);
+              console.log(`[ClusterStorage] Packages to install: ${packagesToInstall.length}`);
+              console.log(`[ClusterStorage] Packages to uninstall: ${packagesToUninstall.length}`);
 
               // Uninstall packages first
               if (packagesToUninstall.length > 0) {
-                console.log(`[ValkeyStorage] Uninstalling packages: ${packagesToUninstall.join(', ')}`);
+                console.log(`[ClusterStorage] Uninstalling packages: ${packagesToUninstall.join(', ')}`);
                 await this.packageHelper!.uninstallPackages(packagesToUninstall);
-                console.log('[ValkeyStorage] Packages uninstalled, should be available to flows');
+                console.log('[ClusterStorage] Packages uninstalled, should be available to flows');
               }
 
               // Install new packages
               if (packagesToInstall.length > 0) {
-                console.log(`[ValkeyStorage] Installing packages: ${packagesToInstall.join(', ')}`);
+                console.log(`[ClusterStorage] Installing packages: ${packagesToInstall.join(', ')}`);
                 await this.packageHelper!.installPackages(packagesToInstall);
-                console.log('[ValkeyStorage] Packages installed, should be available to flows');
+                console.log('[ClusterStorage] Packages installed, should be available to flows');
               }
 
               if (packagesToInstall.length === 0 && packagesToUninstall.length === 0) {
-                console.log('[ValkeyStorage] No package changes needed');
+                console.log('[ClusterStorage] No package changes needed');
               }
             } catch (error) {
-              console.error('[ValkeyStorage] Error processing package update:', error);
+              console.error('[ClusterStorage] Error processing package update:', error);
               // Fail fast - exit with error code
               process.exit(1);
             }
           }
         });
 
-        console.log(`[ValkeyStorage] Subscribed to package updates on ${this.config.packageChannel}`);
+        console.log(`[ClusterStorage] Subscribed to package updates on ${this.config.packageChannel}`);
 
         // Sync packages on worker startup
         try {
-          console.log('[ValkeyStorage] Worker startup: checking for package sync from Redis');
+          console.log('[ClusterStorage] Worker startup: checking for package sync from Redis');
 
           // Try to get package list from Redis
           const packagesKey = 'nodered:packages';
@@ -316,7 +316,7 @@ export class ValkeyStorage implements StorageModule {
 
           if (packagesData) {
             const adminDependencies: Record<string, string> = JSON.parse(packagesData);
-            console.log(`[ValkeyStorage] Found ${Object.keys(adminDependencies).length} packages in Redis`);
+            console.log(`[ClusterStorage] Found ${Object.keys(adminDependencies).length} packages in Redis`);
 
             // Read worker's current package.json to get installed packages
             const packageJsonPath = path.join(this.packageHelper!.getUserDir(), 'package.json');
@@ -327,9 +327,9 @@ export class ValkeyStorage implements StorageModule {
               const packageJson = JSON.parse(packageContent);
               workerDependencies = packageJson.dependencies || {};
 
-              console.log(`[ValkeyStorage] Worker has ${Object.keys(workerDependencies).length} packages installed`);
+              console.log(`[ClusterStorage] Worker has ${Object.keys(workerDependencies).length} packages installed`);
             } catch (error) {
-              console.log('[ValkeyStorage] Worker package.json not found, assuming fresh install');
+              console.log('[ClusterStorage] Worker package.json not found, assuming fresh install');
             }
 
             // Calculate diff
@@ -351,28 +351,28 @@ export class ValkeyStorage implements StorageModule {
               }
             }
 
-            console.log(`[ValkeyStorage] Worker startup: ${packagesToInstall.length} to install, ${packagesToUninstall.length} to uninstall`);
+            console.log(`[ClusterStorage] Worker startup: ${packagesToInstall.length} to install, ${packagesToUninstall.length} to uninstall`);
 
             // Uninstall packages first
             if (packagesToUninstall.length > 0) {
-              console.log(`[ValkeyStorage] Worker startup: uninstalling ${packagesToUninstall.join(', ')}`);
+              console.log(`[ClusterStorage] Worker startup: uninstalling ${packagesToUninstall.join(', ')}`);
               await this.packageHelper!.uninstallPackages(packagesToUninstall);
             }
 
             // Install new packages
             if (packagesToInstall.length > 0) {
-              console.log(`[ValkeyStorage] Worker startup: installing ${packagesToInstall.join(', ')}`);
+              console.log(`[ClusterStorage] Worker startup: installing ${packagesToInstall.join(', ')}`);
               await this.packageHelper!.installPackages(packagesToInstall);
             }
 
             if (packagesToInstall.length === 0 && packagesToUninstall.length === 0) {
-              console.log('[ValkeyStorage] Worker startup: packages already in sync');
+              console.log('[ClusterStorage] Worker startup: packages already in sync');
             }
           } else {
-            console.log('[ValkeyStorage] No package list found in Redis yet');
+            console.log('[ClusterStorage] No package list found in Redis yet');
           }
         } catch (error) {
-          console.error('[ValkeyStorage] Error syncing packages on worker startup:', error);
+          console.error('[ClusterStorage] Error syncing packages on worker startup:', error);
           // Non-fatal error, continue with startup
         }
       }
@@ -385,9 +385,9 @@ export class ValkeyStorage implements StorageModule {
         if (packagesData) {
           try {
             this.lastKnownPackages = JSON.parse(packagesData);
-            console.log(`[ValkeyStorage] Loaded ${Object.keys(this.lastKnownPackages || {}).length} existing packages from Redis`);
+            console.log(`[ClusterStorage] Loaded ${Object.keys(this.lastKnownPackages || {}).length} existing packages from Redis`);
           } catch (error) {
-            console.error('[ValkeyStorage] Error loading initial package state:', error);
+            console.error('[ClusterStorage] Error loading initial package state:', error);
             // Non-fatal - just start with empty state
             this.lastKnownPackages = {};
           }
@@ -409,22 +409,22 @@ export class ValkeyStorage implements StorageModule {
    * Uses Node-RED's Projects API to ensure proper project structure
    */
   private async restoreActiveProject(settings: NodeREDSettings): Promise<void> {
-    console.log('[ValkeyStorage] restoreActiveProject() called');
+    console.log('[ClusterStorage] restoreActiveProject() called');
     try {
       // Check if there's an active project in Redis
       const activeProjectKey = this.getKey('activeProject');
       const activeProjectData = await this.client.get(activeProjectKey);
 
       if (!activeProjectData) {
-        console.log('[ValkeyStorage] No active project in Redis, skipping restore');
+        console.log('[ClusterStorage] No active project in Redis, skipping restore');
         return;
       }
 
       const projectMeta: ProjectMetadata = JSON.parse(activeProjectData);
-      console.log(`[ValkeyStorage] Found active project "${projectMeta.name}" in Redis`);
+      console.log(`[ClusterStorage] Found active project "${projectMeta.name}" in Redis`);
 
       if (!this.localfilesystem?.projects) {
-        console.warn('[ValkeyStorage] Projects API not available, cannot restore project');
+        console.warn('[ClusterStorage] Projects API not available, cannot restore project');
         return;
       }
 
@@ -432,22 +432,22 @@ export class ValkeyStorage implements StorageModule {
       try {
         const existingProject = await this.localfilesystem.projects.getProject(projectMeta.name);
         if (existingProject) {
-          console.log(`[ValkeyStorage] Project "${projectMeta.name}" already exists locally`);
+          console.log(`[ClusterStorage] Project "${projectMeta.name}" already exists locally`);
           // Project exists, activate it if not already active
           const currentActive = this.localfilesystem.projects.getActiveProject();
           if (!currentActive || currentActive.name !== projectMeta.name) {
-            console.log(`[ValkeyStorage] Activating project "${projectMeta.name}"`);
+            console.log(`[ClusterStorage] Activating project "${projectMeta.name}"`);
             const adminUser = { username: 'admin', permissions: '*' };
             await this.localfilesystem.projects.setActiveProject(adminUser, projectMeta.name);
-            console.log(`[ValkeyStorage] Project "${projectMeta.name}" activated successfully`);
+            console.log(`[ClusterStorage] Project "${projectMeta.name}" activated successfully`);
           } else {
-            console.log(`[ValkeyStorage] Project "${projectMeta.name}" is already active`);
+            console.log(`[ClusterStorage] Project "${projectMeta.name}" is already active`);
           }
           return;
         }
       } catch (error) {
         // Project doesn't exist, we'll create it below
-        console.log(`[ValkeyStorage] Project "${projectMeta.name}" not found locally, will be created`);
+        console.log(`[ClusterStorage] Project "${projectMeta.name}" not found locally, will be created`);
       }
 
       // Get flows from Redis to initialize the project
@@ -455,7 +455,7 @@ export class ValkeyStorage implements StorageModule {
       const flowsData = await this.client.get(flowsKey);
 
       if (!flowsData) {
-        console.warn('[ValkeyStorage] No flows in Redis, cannot create project');
+        console.warn('[ClusterStorage] No flows in Redis, cannot create project');
         return;
       }
 
@@ -474,30 +474,30 @@ export class ValkeyStorage implements StorageModule {
         }
       };
 
-      console.log(`[ValkeyStorage] Creating project "${projectMeta.name}" using Projects API`);
+      console.log(`[ClusterStorage] Creating project "${projectMeta.name}" using Projects API`);
 
       try {
         // Create the project - this will create all necessary files and git repo
         await this.localfilesystem.projects.createProject(adminUser, projectConfig);
-        console.log(`[ValkeyStorage] Project created successfully`);
+        console.log(`[ClusterStorage] Project created successfully`);
 
         // Activate the project immediately after creation
         await this.localfilesystem.projects.setActiveProject(adminUser, projectMeta.name);
-        console.log(`[ValkeyStorage] Project "${projectMeta.name}" activated`);
+        console.log(`[ClusterStorage] Project "${projectMeta.name}" activated`);
 
         // Now write the flows to the project using saveFlows
         // The flows will be saved to the project's flow.json via localfilesystem
         // localfilesystem.saveFlows expects just the flows array, not the FlowConfig object
         await this.localfilesystem.saveFlows(flowConfig.flows);
-        console.log(`[ValkeyStorage] Flows written to project`);
+        console.log(`[ClusterStorage] Flows written to project`);
 
       } catch (createError: any) {
-        console.error(`[ValkeyStorage] Error creating project: ${createError.message}`);
+        console.error(`[ClusterStorage] Error creating project: ${createError.message}`);
         // If creation fails, log but continue - Node-RED will work without projects
       }
 
     } catch (error) {
-      console.error('[ValkeyStorage] Error restoring active project:', error);
+      console.error('[ClusterStorage] Error restoring active project:', error);
       // Non-fatal - continue without project
     }
   }
@@ -513,7 +513,7 @@ export class ValkeyStorage implements StorageModule {
       // Just delegate directly to localfilesystem
       if (this.localfilesystem) {
         const result = await this.localfilesystem.getFlows();
-        console.log('[ValkeyStorage] Admin getFlows() from disk:', Array.isArray(result) ? `array[${result.length}]` : 'object');
+        console.log('[ClusterStorage] Admin getFlows() from disk:', Array.isArray(result) ? `array[${result.length}]` : 'object');
         return result;
       }
     } else {
@@ -528,23 +528,23 @@ export class ValkeyStorage implements StorageModule {
         // Node-RED expects an array in non-project mode
         if (!Array.isArray(flows) && flows && typeof flows === 'object' && 'flows' in flows) {
           const flowsArray = (flows as any).flows;
-          console.log('[ValkeyStorage] Worker getFlows() from Redis: extracted array[' + flowsArray.length + '] from object');
+          console.log('[ClusterStorage] Worker getFlows() from Redis: extracted array[' + flowsArray.length + '] from object');
           return flowsArray;
         }
 
         // Already an array (project mode)
-        console.log('[ValkeyStorage] Worker getFlows() from Redis:',
+        console.log('[ClusterStorage] Worker getFlows() from Redis:',
           Array.isArray(flows) ? `array[${flows.length}]` : `object with keys: ${Object.keys(flows).join(',')}`);
         return flows;
       }
 
       // No flows in Redis, return empty
-      console.log('[ValkeyStorage] Worker: no flows in Redis, returning empty array');
+      console.log('[ClusterStorage] Worker: no flows in Redis, returning empty array');
       return [];
     }
 
     // Fallback if localfilesystem not available
-    console.warn('[ValkeyStorage] localfilesystem not available, returning empty flows');
+    console.warn('[ClusterStorage] localfilesystem not available, returning empty flows');
     return { flows: [], rev: '0' };
   }
 
@@ -565,9 +565,9 @@ export class ValkeyStorage implements StorageModule {
       const dataToSave = activeProject ? sanitized.flows : sanitized;
 
       await this.localfilesystem.saveFlows(dataToSave);
-      console.log('[ValkeyStorage] Flows saved via localfilesystem');
+      console.log('[ClusterStorage] Flows saved via localfilesystem');
     } else {
-      console.warn('[ValkeyStorage] localfilesystem not available, skipping file write');
+      console.warn('[ClusterStorage] localfilesystem not available, skipping file write');
     }
 
     // 2. Sync to Redis (always to global key - active flow only)
@@ -576,12 +576,12 @@ export class ValkeyStorage implements StorageModule {
     const key = this.getKey('flows');
     const data = await this.serialize(sanitized);
     await this.client.set(key, data);
-    console.log('[ValkeyStorage] Flows synced to Redis (active flow)');
+    console.log('[ClusterStorage] Flows synced to Redis (active flow)');
 
     // 4. Publish update for worker nodes (admin only)
     if (this.config.role === 'admin' && !skipPublish) {
       await this.client.publish(this.config.updateChannel, Date.now().toString());
-      console.log(`[ValkeyStorage] Published flow update to ${this.config.updateChannel}`);
+      console.log(`[ClusterStorage] Published flow update to ${this.config.updateChannel}`);
     }
   }
 
@@ -603,16 +603,16 @@ export class ValkeyStorage implements StorageModule {
 
       if (credsData) {
         const creds = await this.deserialize<CredentialsConfig>(credsData);
-        console.log('[ValkeyStorage] Worker getCredentials() from Redis:', JSON.stringify(creds).substring(0, 100));
+        console.log('[ClusterStorage] Worker getCredentials() from Redis:', JSON.stringify(creds).substring(0, 100));
         return creds;
       }
 
-      console.log('[ValkeyStorage] Worker: no credentials in Redis, returning empty');
+      console.log('[ClusterStorage] Worker: no credentials in Redis, returning empty');
       return {};
     }
 
     // Fallback if localfilesystem not available
-    console.warn('[ValkeyStorage] localfilesystem not available, returning empty credentials');
+    console.warn('[ClusterStorage] localfilesystem not available, returning empty credentials');
     return {};
   }
 
@@ -624,16 +624,16 @@ export class ValkeyStorage implements StorageModule {
     // 1. Delegate to localfilesystem (writes file + updates memory)
     if (this.localfilesystem) {
       await this.localfilesystem.saveCredentials(credentials);
-      console.log('[ValkeyStorage] Credentials saved via localfilesystem');
+      console.log('[ClusterStorage] Credentials saved via localfilesystem');
     } else {
-      console.warn('[ValkeyStorage] localfilesystem not available, skipping file write');
+      console.warn('[ClusterStorage] localfilesystem not available, skipping file write');
     }
 
     // 2. Sync to Redis (always to global key - active credentials only)
     const key = this.getKey('credentials');
     const data = await this.serialize(credentials);
     await this.client.set(key, data);
-    console.log('[ValkeyStorage] Credentials synced to Redis (active credentials)');
+    console.log('[ClusterStorage] Credentials synced to Redis (active credentials)');
   }
 
   /**
@@ -654,16 +654,16 @@ export class ValkeyStorage implements StorageModule {
 
       if (settingsData) {
         const settings = await this.deserialize<UserSettings>(settingsData);
-        console.log('[ValkeyStorage] Worker getSettings() from Redis');
+        console.log('[ClusterStorage] Worker getSettings() from Redis');
         return settings;
       }
 
-      console.log('[ValkeyStorage] Worker: no settings in Redis, returning empty');
+      console.log('[ClusterStorage] Worker: no settings in Redis, returning empty');
       return {};
     }
 
     // Fallback if localfilesystem not available
-    console.warn('[ValkeyStorage] localfilesystem not available, returning empty settings');
+    console.warn('[ClusterStorage] localfilesystem not available, returning empty settings');
     return {};
   }
 
@@ -674,22 +674,22 @@ export class ValkeyStorage implements StorageModule {
   async saveSettings(settings: UserSettings): Promise<void> {
     // Validate input
     if (!settings || typeof settings !== 'object') {
-      throw new Error('[ValkeyStorage] saveSettings: settings must be an object');
+      throw new Error('[ClusterStorage] saveSettings: settings must be an object');
     }
 
     // 1. Delegate to localfilesystem (writes file + updates memory)
     if (this.localfilesystem) {
       await this.localfilesystem.saveSettings(settings);
-      console.log('[ValkeyStorage] Settings saved via localfilesystem');
+      console.log('[ClusterStorage] Settings saved via localfilesystem');
     } else {
-      console.warn('[ValkeyStorage] localfilesystem not available, skipping file write');
+      console.warn('[ClusterStorage] localfilesystem not available, skipping file write');
     }
 
     // 2. Sync to Redis
     const key = this.getKey('settings');
     const data = await this.serialize(settings);
     await this.client.set(key, data);
-    console.log('[ValkeyStorage] Settings synced to Redis');
+    console.log('[ClusterStorage] Settings synced to Redis');
 
     // 3. Package sync: debounced to wait for package.json update (admin only)
     if (this.config.syncPackages && this.config.role === 'admin') {
@@ -698,17 +698,17 @@ export class ValkeyStorage implements StorageModule {
         clearTimeout(this.packageSyncTimer);
       }
 
-      console.log('[ValkeyStorage] Scheduling package sync (debounced 500ms)...');
+      console.log('[ClusterStorage] Scheduling package sync (debounced 500ms)...');
 
       // Schedule package sync after 500ms to allow package.json to be updated
       this.packageSyncTimer = setTimeout(() => {
-        console.log('[ValkeyStorage] Running debounced package sync...');
+        console.log('[ClusterStorage] Running debounced package sync...');
         this.handlePackageSync(settings).catch(error => {
-          console.error('[ValkeyStorage] Package sync failed:', error);
+          console.error('[ClusterStorage] Package sync failed:', error);
         });
       }, 500);
     } else {
-      console.log('[ValkeyStorage] Package sync skipped: syncPackages=' + this.config.syncPackages + ', role=' + this.config.role);
+      console.log('[ClusterStorage] Package sync skipped: syncPackages=' + this.config.syncPackages + ', role=' + this.config.role);
     }
   }
 
@@ -730,16 +730,16 @@ export class ValkeyStorage implements StorageModule {
 
       if (sessionsData) {
         const sessions = await this.deserialize<SessionsConfig>(sessionsData);
-        console.log('[ValkeyStorage] Worker getSessions() from Redis');
+        console.log('[ClusterStorage] Worker getSessions() from Redis');
         return sessions;
       }
 
-      console.log('[ValkeyStorage] Worker: no sessions in Redis, returning empty');
+      console.log('[ClusterStorage] Worker: no sessions in Redis, returning empty');
       return {};
     }
 
     // Fallback if localfilesystem not available
-    console.warn('[ValkeyStorage] localfilesystem not available, returning empty sessions');
+    console.warn('[ClusterStorage] localfilesystem not available, returning empty sessions');
     return {};
   }
 
@@ -750,16 +750,16 @@ export class ValkeyStorage implements StorageModule {
     // 1. Delegate to localfilesystem (writes file + updates memory)
     if (this.localfilesystem) {
       await this.localfilesystem.saveSessions(sessions);
-      console.log('[ValkeyStorage] Sessions saved via localfilesystem');
+      console.log('[ClusterStorage] Sessions saved via localfilesystem');
     } else {
-      console.warn('[ValkeyStorage] localfilesystem not available, skipping file write');
+      console.warn('[ClusterStorage] localfilesystem not available, skipping file write');
     }
 
     // 2. Sync to Redis with TTL
     const key = this.getKey('sessions');
     const data = await this.serialize(sessions);
     await this.client.set(key, data, 'EX', this.config.sessionTTL);
-    console.log('[ValkeyStorage] Sessions synced to Redis');
+    console.log('[ClusterStorage] Sessions synced to Redis');
   }
 
   /**
@@ -827,7 +827,7 @@ export class ValkeyStorage implements StorageModule {
       if (activeProject?.name && (type === 'flows' || type === 'credentials')) {
         // For flows/credentials with active project, use project-specific key
         key = this.getKey(`projects:${activeProject.name}:${type}`);
-        console.log(`[ValkeyStorage] Restoring ${type} from project "${activeProject.name}"`);
+        console.log(`[ClusterStorage] Restoring ${type} from project "${activeProject.name}"`);
       } else {
         // For settings/sessions, or flows/credentials without project, use global key
         key = this.getKey(type);
@@ -847,14 +847,14 @@ export class ValkeyStorage implements StorageModule {
           // If there's an active project, extract the array
           if (activeProject && data && typeof data === 'object' && 'flows' in data) {
             dataToSave = (data as any).flows;
-            console.log(`[ValkeyStorage] Restoring flows for active project: extracted array of ${Array.isArray(dataToSave) ? dataToSave.length : 'unknown'} flows`);
+            console.log(`[ClusterStorage] Restoring flows for active project: extracted array of ${Array.isArray(dataToSave) ? dataToSave.length : 'unknown'} flows`);
           } else if (!activeProject) {
             // No active project: ensure we have object format
             if (Array.isArray(data)) {
               dataToSave = { flows: data, rev: '0' };
-              console.log(`[ValkeyStorage] Restoring flows (no project): converting array to object format`);
+              console.log(`[ClusterStorage] Restoring flows (no project): converting array to object format`);
             } else {
-              console.log(`[ValkeyStorage] Restoring flows (no project): using object format with ${(data as any)?.flows?.length || 0} flows`);
+              console.log(`[ClusterStorage] Restoring flows (no project): using object format with ${(data as any)?.flows?.length || 0} flows`);
             }
           }
 
@@ -862,11 +862,11 @@ export class ValkeyStorage implements StorageModule {
           try {
             await this.localfilesystem.saveFlows(dataToSave);
             const count = Array.isArray(dataToSave) ? dataToSave.length : (dataToSave?.flows?.length || 0);
-            console.log(`[ValkeyStorage] Restored ${count} flows from Redis via localfilesystem`);
+            console.log(`[ClusterStorage] Restored ${count} flows from Redis via localfilesystem`);
           } catch (saveError: any) {
             // If save fails (e.g., due to project state), just log and continue
-            console.warn(`[ValkeyStorage] Could not save flows via localfilesystem: ${saveError.message}`);
-            console.log('[ValkeyStorage] Flows will be loaded from Redis on next getFlows() call');
+            console.warn(`[ClusterStorage] Could not save flows via localfilesystem: ${saveError.message}`);
+            console.log('[ClusterStorage] Flows will be loaded from Redis on next getFlows() call');
           }
         } else {
           // For other types (credentials, settings, sessions), restore normally
@@ -875,11 +875,11 @@ export class ValkeyStorage implements StorageModule {
             type === 'settings' ? 'saveSettings' : 'saveSessions';
 
           await this.localfilesystem[saveMethod](data);
-          console.log(`[ValkeyStorage] Restored ${type} from Redis via localfilesystem`);
+          console.log(`[ClusterStorage] Restored ${type} from Redis via localfilesystem`);
         }
       }
     } catch (error) {
-      console.error(`[ValkeyStorage] Error restoring ${type} from Redis:`, error);
+      console.error(`[ClusterStorage] Error restoring ${type} from Redis:`, error);
       // Non-fatal - continue with whatever localfilesystem has
     }
 
@@ -908,14 +908,14 @@ export class ValkeyStorage implements StorageModule {
    */
   private sanitizeFlows(flowConfig: any): FlowConfig {
     if (!flowConfig || typeof flowConfig !== 'object') {
-      console.warn('[ValkeyStorage] Invalid flow config, returning empty');
+      console.warn('[ClusterStorage] Invalid flow config, returning empty');
       return { flows: [], rev: '0' };
     }
 
     // Handle case where flowConfig is already an array (no active project)
     // localfilesystem returns array directly when not using projects
     if (Array.isArray(flowConfig)) {
-      console.log('[ValkeyStorage] Flow config is array (no active project), converting to object format');
+      console.log('[ClusterStorage] Flow config is array (no active project), converting to object format');
       return {
         flows: flowConfig.filter((flow: any) => {
           if (flow === null || flow === undefined) return false;
@@ -930,22 +930,22 @@ export class ValkeyStorage implements StorageModule {
     // Handle object format (active project or Redis storage)
     let flows = flowConfig.flows;
     if (!Array.isArray(flows)) {
-      console.warn('[ValkeyStorage] Flow config missing flows array, initializing empty');
+      console.warn('[ClusterStorage] Flow config missing flows array, initializing empty');
       flows = [];
     }
 
     // Filter out null/undefined entries and validate each flow has an id
     const validFlows = flows.filter((flow: any) => {
       if (flow === null || flow === undefined) {
-        console.warn('[ValkeyStorage] Filtered out null/undefined flow');
+        console.warn('[ClusterStorage] Filtered out null/undefined flow');
         return false;
       }
       if (typeof flow !== 'object') {
-        console.warn('[ValkeyStorage] Filtered out non-object flow:', typeof flow);
+        console.warn('[ClusterStorage] Filtered out non-object flow:', typeof flow);
         return false;
       }
       if (!flow.id) {
-        console.warn('[ValkeyStorage] Filtered out flow without id:', flow);
+        console.warn('[ClusterStorage] Filtered out flow without id:', flow);
         return false;
       }
       return true;
@@ -954,7 +954,7 @@ export class ValkeyStorage implements StorageModule {
     // Log if we filtered any flows
     if (validFlows.length !== flows.length) {
       console.warn(
-        `[ValkeyStorage] Sanitized flows: ${flows.length} → ${validFlows.length} (removed ${flows.length - validFlows.length} invalid entries)`
+        `[ClusterStorage] Sanitized flows: ${flows.length} → ${validFlows.length} (removed ${flows.length - validFlows.length} invalid entries)`
       );
     }
 
@@ -1012,36 +1012,36 @@ export class ValkeyStorage implements StorageModule {
    * Throws errors to ensure data integrity - Node-RED needs to know if save fails
    */
   private async handlePackageSync(settings: UserSettings): Promise<void> {
-    console.log('[ValkeyStorage] handlePackageSync called');
+    console.log('[ClusterStorage] handlePackageSync called');
 
     try {
       // Read package.json to get installed modules
       if (!this.packageHelper) {
-        console.log('[ValkeyStorage] No packageHelper available, skipping package sync');
+        console.log('[ClusterStorage] No packageHelper available, skipping package sync');
         return;
       }
 
       const packageJsonPath = path.join(this.packageHelper.getUserDir(), 'package.json');
-      console.log('[ValkeyStorage] Reading package.json from:', packageJsonPath);
+      console.log('[ClusterStorage] Reading package.json from:', packageJsonPath);
 
       let packageJson: any;
       try {
         const packageContent = await fs.readFile(packageJsonPath, 'utf8');
         packageJson = JSON.parse(packageContent);
       } catch (error) {
-        console.log('[ValkeyStorage] No package.json found, skipping package sync');
+        console.log('[ClusterStorage] No package.json found, skipping package sync');
         return;
       }
 
       // Extract installed packages with versions from dependencies
       const dependencies: Record<string, string> = packageJson.dependencies || {};
 
-      console.log('[ValkeyStorage] Found', Object.keys(dependencies).length, 'installed packages in package.json');
-      console.log('[ValkeyStorage] Package list:', Object.keys(dependencies).join(', '));
+      console.log('[ClusterStorage] Found', Object.keys(dependencies).length, 'installed packages in package.json');
+      console.log('[ClusterStorage] Package list:', Object.keys(dependencies).join(', '));
 
       // Detect changes
       if (this.hasPackageChanges(dependencies)) {
-        console.log('[ValkeyStorage] Package changes detected, publishing update...');
+        console.log('[ClusterStorage] Package changes detected, publishing update...');
 
         // Publish dependencies object with versions
         await this.client.publish(this.config.packageChannel, JSON.stringify(dependencies));
@@ -1050,16 +1050,16 @@ export class ValkeyStorage implements StorageModule {
         const packagesKey = 'nodered:packages';
         await this.client.set(packagesKey, JSON.stringify(dependencies));
 
-        console.log(`[ValkeyStorage] Published ${Object.keys(dependencies).length} package(s) with versions to ${this.config.packageChannel}`);
-        console.log(`[ValkeyStorage] Saved ${Object.keys(dependencies).length} package(s) to Redis key: ${packagesKey}`);
+        console.log(`[ClusterStorage] Published ${Object.keys(dependencies).length} package(s) with versions to ${this.config.packageChannel}`);
+        console.log(`[ClusterStorage] Saved ${Object.keys(dependencies).length} package(s) to Redis key: ${packagesKey}`);
 
         // Update known packages
         this.lastKnownPackages = dependencies;
       }
     } catch (error) {
       // Log detailed error for debugging
-      console.error('[ValkeyStorage] Package sync failed:', error);
-      console.error('[ValkeyStorage] Settings keys:', Object.keys(settings));
+      console.error('[ClusterStorage] Package sync failed:', error);
+      console.error('[ClusterStorage] Settings keys:', Object.keys(settings));
 
       // Re-throw with more context
       throw new Error(
@@ -1102,7 +1102,7 @@ export class ValkeyStorage implements StorageModule {
    */
   get projects() {
     const projectsModule = this.localfilesystem?.projects;
-    console.log('[ValkeyStorage] projects getter called, returning:', projectsModule ? 'projects module' : 'undefined');
+    console.log('[ClusterStorage] projects getter called, returning:', projectsModule ? 'projects module' : 'undefined');
     return projectsModule;
   }
 }

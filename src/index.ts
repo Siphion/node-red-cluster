@@ -19,7 +19,7 @@ const projectsProxy = new Proxy(
     get(target, prop) {
       // If Projects module failed to initialize, return safe defaults
       if (!realProjectsModule) {
-        console.warn(`[ValkeyStorage] Projects not available - method "${String(prop)}" called but module not initialized`);
+        console.warn(`[ClusterStorage] Projects not available - method "${String(prop)}" called but module not initialized`);
 
         // Return safe defaults for common methods
         if (prop === 'getActiveProject') {
@@ -46,14 +46,14 @@ const projectsProxy = new Proxy(
             // If it's a Promise, handle async result
             if (result && typeof result.then === 'function') {
               return result.catch((error: any) => {
-                console.error(`[ValkeyStorage] Error in async projects.${String(prop)}:`, error.message);
+                console.error(`[ClusterStorage] Error in async projects.${String(prop)}:`, error.message);
                 throw error; // Re-throw to let Node-RED handle it
               });
             }
 
             return result;
           } catch (error: any) {
-            console.error(`[ValkeyStorage] Error calling projects.${String(prop)}:`, error.message);
+            console.error(`[ClusterStorage] Error calling projects.${String(prop)}:`, error.message);
             throw error; // Re-throw to let Node-RED handle it
           }
         };
@@ -78,9 +78,9 @@ const storageModule: any = {
     if (storage.projects) {
       realProjectsModule = storage.projects;
       localfilesystemModule = storage.localfilesystem;
-      console.log('[ValkeyStorage] Projects module loaded and ready');
+      console.log('[ClusterStorage] Projects module loaded and ready');
     } else {
-      console.log('[ValkeyStorage] Projects module not available');
+      console.log('[ClusterStorage] Projects module not available');
     }
   },
   getFlows: () => storage.getFlows(),

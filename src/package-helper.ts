@@ -24,11 +24,11 @@ export class PackageHelper {
    */
   async installPackages(packages: string[]): Promise<void> {
     if (!packages || packages.length === 0) {
-      console.log('[ValkeyStorage] No packages to install');
+      console.log('[ClusterStorage] No packages to install');
       return;
     }
 
-    console.log(`[ValkeyStorage] Installing ${packages.length} package(s): ${packages.join(', ')}`);
+    console.log(`[ClusterStorage] Installing ${packages.length} package(s): ${packages.join(', ')}`);
 
     return new Promise((resolve, reject) => {
       // Determine npm command (npm on Unix, npm.cmd on Windows)
@@ -58,7 +58,7 @@ export class PackageHelper {
         // Log npm output with prefix
         output.split('\n').forEach(line => {
           if (line.trim()) {
-            console.log(`[ValkeyStorage] npm: ${line}`);
+            console.log(`[ClusterStorage] npm: ${line}`);
           }
         });
       });
@@ -70,7 +70,7 @@ export class PackageHelper {
         // Log npm errors with prefix
         output.split('\n').forEach(line => {
           if (line.trim()) {
-            console.error(`[ValkeyStorage] npm: ${line}`);
+            console.error(`[ClusterStorage] npm: ${line}`);
           }
         });
       });
@@ -78,13 +78,13 @@ export class PackageHelper {
       // Handle process completion
       npmProcess.on('close', (code: number | null) => {
         if (code === 0) {
-          console.log(`[ValkeyStorage] Successfully installed ${packages.length} package(s)`);
+          console.log(`[ClusterStorage] Successfully installed ${packages.length} package(s)`);
           resolve();
         } else {
           const error = new Error(
             `npm install failed with exit code ${code}\nPackages: ${packages.join(', ')}\nStderr: ${stderr}`
           );
-          console.error('[ValkeyStorage] Package installation failed:', error.message);
+          console.error('[ClusterStorage] Package installation failed:', error.message);
           // Fail fast - throw error to crash the process
           reject(error);
         }
@@ -92,7 +92,7 @@ export class PackageHelper {
 
       // Handle spawn errors (e.g., npm not found)
       npmProcess.on('error', (error: Error) => {
-        console.error('[ValkeyStorage] Failed to spawn npm process:', error);
+        console.error('[ClusterStorage] Failed to spawn npm process:', error);
         reject(error);
       });
     });
@@ -107,11 +107,11 @@ export class PackageHelper {
    */
   async uninstallPackages(packages: string[]): Promise<void> {
     if (!packages || packages.length === 0) {
-      console.log('[ValkeyStorage] No packages to uninstall');
+      console.log('[ClusterStorage] No packages to uninstall');
       return;
     }
 
-    console.log(`[ValkeyStorage] Uninstalling ${packages.length} package(s): ${packages.join(', ')}`);
+    console.log(`[ClusterStorage] Uninstalling ${packages.length} package(s): ${packages.join(', ')}`);
 
     return new Promise((resolve, reject) => {
       // Determine npm command (npm on Unix, npm.cmd on Windows)
@@ -141,7 +141,7 @@ export class PackageHelper {
         // Log npm output with prefix
         output.split('\n').forEach(line => {
           if (line.trim()) {
-            console.log(`[ValkeyStorage] npm: ${line}`);
+            console.log(`[ClusterStorage] npm: ${line}`);
           }
         });
       });
@@ -153,7 +153,7 @@ export class PackageHelper {
         // Log npm errors with prefix
         output.split('\n').forEach(line => {
           if (line.trim()) {
-            console.error(`[ValkeyStorage] npm: ${line}`);
+            console.error(`[ClusterStorage] npm: ${line}`);
           }
         });
       });
@@ -161,13 +161,13 @@ export class PackageHelper {
       // Handle process completion
       npmProcess.on('close', (code: number | null) => {
         if (code === 0) {
-          console.log(`[ValkeyStorage] Successfully uninstalled ${packages.length} package(s)`);
+          console.log(`[ClusterStorage] Successfully uninstalled ${packages.length} package(s)`);
           resolve();
         } else {
           const error = new Error(
             `npm uninstall failed with exit code ${code}\nPackages: ${packages.join(', ')}\nStderr: ${stderr}`
           );
-          console.error('[ValkeyStorage] Package uninstallation failed:', error.message);
+          console.error('[ClusterStorage] Package uninstallation failed:', error.message);
           // Fail fast - throw error to crash the process
           reject(error);
         }
@@ -175,7 +175,7 @@ export class PackageHelper {
 
       // Handle spawn errors (e.g., npm not found)
       npmProcess.on('error', (error: Error) => {
-        console.error('[ValkeyStorage] Failed to spawn npm process:', error);
+        console.error('[ClusterStorage] Failed to spawn npm process:', error);
         reject(error);
       });
     });
@@ -211,7 +211,7 @@ export class PackageHelper {
 
       return { hasPackageJson, hasNodeModules };
     } catch (error) {
-      console.error('[ValkeyStorage] Error verifying userDir:', error);
+      console.error('[ClusterStorage] Error verifying userDir:', error);
       throw new Error(`UserDir ${this.userDir} is not accessible or does not exist`);
     }
   }

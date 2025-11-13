@@ -1,6 +1,6 @@
 {
   "name": "node-red-cluster",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Complete Node-RED clustering solution with Valkey/Redis: storage, context, and leader election",
   "keywords": [
     "node-red",

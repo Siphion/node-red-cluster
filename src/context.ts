@@ -143,9 +143,9 @@ export class ValkeyContext implements ContextStore {
       await this.client.script('LOAD', this.setNestedScript);
       await this.client.script('LOAD', this.deleteNestedScript);
 
-      console.log('[ValkeyContext] Connected to Redis/Valkey successfully');
+      console.log('[ClusterContext] Connected to Redis/Valkey successfully');
     } catch (error) {
-      console.error('[ValkeyContext] Failed to connect to Redis/Valkey:', error);
+      console.error('[ClusterContext] Failed to connect to Redis/Valkey:', error);
       throw error;
     }
   }
@@ -157,7 +157,7 @@ export class ValkeyContext implements ContextStore {
     if (this.client) {
       await this.client.quit();
       this.client = null;
-      console.log('[ValkeyContext] Disconnected from Redis/Valkey');
+      console.log('[ClusterContext] Disconnected from Redis/Valkey');
     }
   }
 
@@ -283,7 +283,7 @@ export class ValkeyContext implements ContextStore {
     // Delete keys for inactive nodes
     if (keysToDelete.length > 0) {
       await this.client.del(...keysToDelete);
-      console.log(`[ValkeyContext] Cleaned ${keysToDelete.length} keys for inactive nodes`);
+      console.log(`[ClusterContext] Cleaned ${keysToDelete.length} keys for inactive nodes`);
     }
   }
 
