@@ -389,7 +389,7 @@ This ensures different workers handle different scheduled tasks, distributing th
      │ Editor  │    │ Execute │         │ Execute │
      │ Publish │    │ Auto-   │         │ Auto-   │
      │ Flows   │    │ Reload  │         │ Reload  │
-     │         │    │ Leader? │         │ Follower│
+     │         │    │ Leader  │         │ Follower│
      └─────────┘    └─────────┘         └─────────┘
 ```
 
